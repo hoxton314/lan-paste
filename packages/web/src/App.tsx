@@ -5,18 +5,20 @@ import { useWebSocket } from './hooks/useWebSocket.js';
 import { Header } from './components/Header.js';
 import { PushForm } from './components/PushForm.js';
 import { ClipList } from './components/ClipList.js';
+import { ImagePreview } from './components/ImagePreview.js';
 
 export function App() {
   const [clips, setClips] = useState<ClipResponse[]>([]);
   const [filter, setFilter] = useState<'all' | 'text' | 'image'>('all');
   const [loading, setLoading] = useState(true);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   const loadClips = useCallback(async () => {
     try {
       const data = await fetchClips(100);
       setClips(data.clips);
     } catch {
-      // will retry via websocket reconnect or manual refresh
+      // will retry
     } finally {
       setLoading(false);
     }
@@ -48,9 +50,13 @@ export function App() {
           filter={filter}
           onFilterChange={setFilter}
           onDeleted={handleDeleted}
+          onImageClick={setPreviewUrl}
           loading={loading}
         />
       </div>
+      {previewUrl && (
+        <ImagePreview url={previewUrl} onClose={() => setPreviewUrl(null)} />
+      )}
     </div>
   );
 }

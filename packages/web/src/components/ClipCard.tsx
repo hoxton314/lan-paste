@@ -19,7 +19,15 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)}M`;
 }
 
-export function ClipCard({ clip, onDeleted }: { clip: ClipResponse; onDeleted: (id: string) => void }) {
+export function ClipCard({
+  clip,
+  onDeleted,
+  onImageClick,
+}: {
+  clip: ClipResponse;
+  onDeleted: (id: string) => void;
+  onImageClick?: (url: string) => void;
+}) {
   const [copied, setCopied] = useState(false);
   const [confirming, setConfirming] = useState(false);
 
@@ -29,9 +37,25 @@ export function ClipCard({ clip, onDeleted }: { clip: ClipResponse; onDeleted: (
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     }
+    if (clip.type === 'image' && clip.image_url) {
+      // Try to copy image to clipboard
+      try {
+        const res = await fetch(clip.image_url);
+        const blob = await res.blob();
+        await navigator.clipboard.write([
+          new ClipboardItem({ [blob.type]: blob }),
+        ]);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      } catch {
+        // Fallback: open in new tab
+        if (onImageClick && clip.image_url) onImageClick(clip.image_url);
+      }
+    }
   };
 
-  const handleDelete = async () => {
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.stopPropagation();
     if (!confirming) {
       setConfirming(true);
       setTimeout(() => setConfirming(false), 3000);
@@ -52,12 +76,21 @@ export function ClipCard({ clip, onDeleted }: { clip: ClipResponse; onDeleted: (
         </pre>
       )}
       {clip.type === 'image' && clip.image_url && (
-        <img
-          src={clip.image_url}
-          alt={clip.filename || 'image'}
-          className="max-h-48 rounded mb-3 object-contain"
-          loading="lazy"
-        />
+        <div className="mb-3">
+          <img
+            src={clip.image_url}
+            alt={clip.filename || 'image'}
+            className="max-h-48 rounded object-contain cursor-zoom-in"
+            loading="lazy"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (onImageClick && clip.image_url) onImageClick(clip.image_url);
+            }}
+          />
+          {clip.filename && (
+            <span className="text-xs text-zinc-500 mt-1 block">{clip.filename}</span>
+          )}
+        </div>
       )}
       <div className="flex items-center justify-between text-xs text-zinc-500">
         <div className="flex items-center gap-2">
@@ -68,7 +101,7 @@ export function ClipCard({ clip, onDeleted }: { clip: ClipResponse; onDeleted: (
         <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
           {copied && <span className="text-emerald-400">Copied!</span>}
           <button
-            onClick={(e) => { e.stopPropagation(); handleDelete(); }}
+            onClick={handleDelete}
             className={`px-1.5 py-0.5 rounded hover:bg-zinc-800 ${confirming ? 'text-red-400' : 'text-zinc-500'}`}
           >
             {confirming ? 'Confirm?' : 'Delete'}

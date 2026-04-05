@@ -6,10 +6,11 @@ interface ClipListProps {
   filter: 'all' | 'text' | 'image';
   onFilterChange: (f: 'all' | 'text' | 'image') => void;
   onDeleted: (id: string) => void;
+  onImageClick: (url: string) => void;
   loading: boolean;
 }
 
-export function ClipList({ clips, filter, onFilterChange, onDeleted, loading }: ClipListProps) {
+export function ClipList({ clips, filter, onFilterChange, onDeleted, onImageClick, loading }: ClipListProps) {
   const filtered = filter === 'all' ? clips : clips.filter((c) => c.type === filter);
   const tabs: Array<{ key: 'all' | 'text' | 'image'; label: string }> = [
     { key: 'all', label: 'All' },
@@ -48,7 +49,7 @@ export function ClipList({ clips, filter, onFilterChange, onDeleted, loading }: 
 
       <div className="space-y-2">
         {filtered.map((clip) => (
-          <ClipCard key={clip.id} clip={clip} onDeleted={onDeleted} />
+          <ClipCard key={clip.id} clip={clip} onDeleted={onDeleted} onImageClick={onImageClick} />
         ))}
       </div>
     </div>

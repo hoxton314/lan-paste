@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, execSync } from 'node:child_process';
 import { platform } from 'node:os';
 
 function which(cmd: string): boolean {
@@ -59,4 +59,52 @@ export function writeClipboardText(text: string): void {
     return;
   }
   throw new Error(`Unsupported platform: ${os}`);
+}
+
+/** Returns list of MIME types available in clipboard */
+export function clipboardMimeTypes(): string[] {
+  const os = platform();
+  if (os === 'linux' && process.env.WAYLAND_DISPLAY && which('wl-paste')) {
+    try {
+      const out = execFileSync('wl-paste', ['--list-types'], { encoding: 'utf8' });
+      return out.trim().split('\n').filter(Boolean);
+    } catch {
+      return [];
+    }
+  }
+  // Other platforms: best-effort
+  return ['text/plain'];
+}
+
+/** Check if clipboard contains an image */
+export function clipboardHasImage(): boolean {
+  const types = clipboardMimeTypes();
+  return types.some((t) => t.startsWith('image/'));
+}
+
+/** Read image from clipboard as Buffer. Returns { data, mimeType } */
+export function readClipboardImage(): { data: Buffer; mimeType: string } {
+  const os = platform();
+  if (os === 'linux' && process.env.WAYLAND_DISPLAY && which('wl-paste')) {
+    const types = clipboardMimeTypes();
+    // Prefer PNG > JPEG > others
+    const preferred = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+    const mime = preferred.find((p) => types.includes(p)) || types.find((t) => t.startsWith('image/'));
+    if (!mime) throw new Error('No image in clipboard');
+    const data = execFileSync('wl-paste', ['-t', mime]);
+    return { data, mimeType: mime };
+  }
+  // macOS: pbpaste doesn't support images well; would need osascript
+  // Windows: would need PowerShell tricks
+  throw new Error('Clipboard image reading not supported on this platform');
+}
+
+/** Write image to clipboard */
+export function writeClipboardImage(data: Buffer, mimeType: string): void {
+  const os = platform();
+  if (os === 'linux' && process.env.WAYLAND_DISPLAY && which('wl-copy')) {
+    execFileSync('wl-copy', ['-t', mimeType], { input: data });
+    return;
+  }
+  throw new Error('Clipboard image writing not supported on this platform');
 }
