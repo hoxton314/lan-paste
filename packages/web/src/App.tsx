@@ -38,11 +38,11 @@ export function App() {
     setClips((prev) => prev.filter((c) => c.id !== id));
   }, []);
 
-  useWebSocket({ onNewClip: handleNewClip, onClipDeleted: handleClipDeleted });
+  const { connected } = useWebSocket({ onNewClip: handleNewClip, onClipDeleted: handleClipDeleted });
 
   return (
     <div className="mx-auto max-w-2xl px-4 pb-12">
-      <Header />
+      <Header connected={connected} />
       <div className="space-y-6">
         <PushForm onPushed={loadClips} />
         <ClipList

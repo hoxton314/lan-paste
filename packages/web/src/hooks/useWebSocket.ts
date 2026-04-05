@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import type { WsNewClip, WsClipDeleted } from '@lan-paste/shared';
 import { getDeviceId, getDeviceName } from '../lib/device.js';
 
@@ -11,6 +11,7 @@ export function useWebSocket({ onNewClip, onClipDeleted }: UseWebSocketOptions) 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const reconnectDelay = useRef<number>(1000);
+  const [connected, setConnected] = useState(false);
 
   const connect = useCallback(() => {
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -19,6 +20,7 @@ export function useWebSocket({ onNewClip, onClipDeleted }: UseWebSocketOptions) 
 
     ws.onopen = () => {
       reconnectDelay.current = 1000;
+      setConnected(true);
       ws.send(JSON.stringify({
         type: 'identify',
         device_id: getDeviceId(),
@@ -38,6 +40,7 @@ export function useWebSocket({ onNewClip, onClipDeleted }: UseWebSocketOptions) 
     };
 
     ws.onclose = () => {
+      setConnected(false);
       reconnectTimeout.current = setTimeout(() => {
         reconnectDelay.current = Math.min(reconnectDelay.current * 2, 30_000);
         connect();
@@ -54,4 +57,6 @@ export function useWebSocket({ onNewClip, onClipDeleted }: UseWebSocketOptions) 
       wsRef.current?.close();
     };
   }, [connect]);
+
+  return { connected };
 }

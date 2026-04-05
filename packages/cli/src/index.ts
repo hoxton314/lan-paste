@@ -4,6 +4,7 @@ import { pushCommand } from './commands/push.js';
 import { pullCommand } from './commands/pull.js';
 import { historyCommand } from './commands/history.js';
 import { watchCommand } from './commands/watch.js';
+import { configCommand } from './commands/config.js';
 
 const program = new Command()
   .name('lan-paste')
@@ -14,5 +15,6 @@ program.addCommand(pushCommand);
 program.addCommand(pullCommand);
 program.addCommand(historyCommand);
 program.addCommand(watchCommand);
+program.addCommand(configCommand);
 
 program.parse();

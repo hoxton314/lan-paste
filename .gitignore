@@ -4,6 +4,9 @@ dist/
 *.db
 *.db-wal
 *.db-shm
+data/
 storage/
 .DS_Store
 *.tgz
+*.log
+.vite/
