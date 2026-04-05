@@ -10,8 +10,10 @@
   },
   "dependencies": {
     "@lan-paste/shared": "0.1.0",
+    "@tailwindcss/vite": "^4.2.2",
     "react": "^19",
-    "react-dom": "^19"
+    "react-dom": "^19",
+    "tailwindcss": "^4.2.2"
   },
   "devDependencies": {
     "@types/react": "^19",

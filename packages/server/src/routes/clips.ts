@@ -10,6 +10,7 @@ import {
 } from '@lan-paste/shared';
 import type { Clip, ClipResponse, ClipListResponse } from '@lan-paste/shared';
 import { getDb } from '../db.js';
+import { broadcastNewClip, broadcastClipDeleted } from '../ws.js';
 
 export const clipsRouter = Router();
 
@@ -66,7 +67,9 @@ clipsRouter.post('/', (req, res) => {
     ON CONFLICT(id) DO UPDATE SET name = excluded.name, last_seen = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
   `).run(device_id, device_name);
 
-  res.status(201).json(clipToResponse(clip));
+  const response = clipToResponse(clip);
+  broadcastNewClip(response, device_id);
+  res.status(201).json(response);
 });
 
 // GET /api/clips/latest
@@ -153,5 +156,6 @@ clipsRouter.delete('/:id', (req, res) => {
     return;
   }
 
+  broadcastClipDeleted(req.params.id);
   res.status(204).send();
 });

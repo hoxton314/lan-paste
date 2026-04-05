@@ -1,0 +1,10 @@
+{
+  "name": "LAN Paste",
+  "short_name": "LAN Paste",
+  "description": "Cross-device clipboard sharing",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#09090b",
+  "icons": []
+}
