@@ -1,0 +1,23 @@
+# lan-paste server — systemd user service (simpler for homelab, runs as your user)
+# Install: cp deploy/lan-paste-server-user.service ~/.config/systemd/user/lan-paste-server.service
+# Enable:  systemctl --user enable --now lan-paste-server
+# Logs:    journalctl --user -u lan-paste-server -f
+
+[Unit]
+Description=LAN Paste Server
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/git/lan-paste
+ExecStart=%h/.nvm/versions/node/v24.14.1/bin/node packages/server/dist/index.js
+Restart=always
+RestartSec=5
+
+EnvironmentFile=-%h/.config/lan-paste/server.env
+Environment=NODE_ENV=production
+Environment=LAN_PASTE_PORT=3456
+Environment=LAN_PASTE_HOST=0.0.0.0
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,21 @@
+# lan-paste clipboard watcher — systemd user service (desktop clients)
+# Install: cp deploy/lan-paste-watch.service ~/.config/systemd/user/
+# Enable:  systemctl --user enable --now lan-paste-watch
+# Logs:    journalctl --user -u lan-paste-watch -f
+
+[Unit]
+Description=LAN Paste Clipboard Watcher
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/lan-paste watch
+Restart=always
+RestartSec=5
+
+# Wayland clipboard access requires these
+Environment=WAYLAND_DISPLAY=wayland-1
+Environment=XDG_RUNTIME_DIR=/run/user/%U
+
+[Install]
+WantedBy=graphical-session.target

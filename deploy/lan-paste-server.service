@@ -1,0 +1,37 @@
+# lan-paste server — systemd system service (for homelab)
+# Install: sudo cp deploy/lan-paste-server.service /etc/systemd/system/
+# Enable:  sudo systemctl enable --now lan-paste-server
+# Logs:    journalctl -u lan-paste-server -f
+
+[Unit]
+Description=LAN Paste Server
+After=network-online.target tailscaled.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=lan-paste
+Group=lan-paste
+WorkingDirectory=/opt/lan-paste
+ExecStart=/usr/bin/node packages/server/dist/index.js
+Restart=always
+RestartSec=5
+
+# Environment — override via /etc/lan-paste/server.env or drop-in
+EnvironmentFile=-/etc/lan-paste/server.env
+Environment=NODE_ENV=production
+Environment=LAN_PASTE_PORT=3456
+Environment=LAN_PASTE_HOST=0.0.0.0
+Environment=LAN_PASTE_STORAGE_DIR=/var/lib/lan-paste/storage
+Environment=LAN_PASTE_DB_PATH=/var/lib/lan-paste/lan-paste.db
+Environment=LAN_PASTE_WEB_DIR=/opt/lan-paste/packages/web/dist
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/lan-paste
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
