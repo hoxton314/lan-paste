@@ -1,0 +1,30 @@
+{
+  "name": "@lan-paste/server",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --target node22",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@lan-paste/shared": "0.1.0",
+    "better-sqlite3": "^11",
+    "cors": "^2",
+    "dotenv": "^16",
+    "express": "^4",
+    "multer": "^1",
+    "nanoid": "^5",
+    "zod": "^3"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7",
+    "@types/cors": "^2",
+    "@types/express": "^5",
+    "@types/multer": "^1",
+    "tsup": "^8",
+    "tsx": "^4",
+    "typescript": "^5.7"
+  }
+}
