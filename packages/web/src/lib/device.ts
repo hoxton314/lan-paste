@@ -2,7 +2,9 @@ const DEVICE_ID_KEY = 'lan-paste-device-id';
 const DEVICE_NAME_KEY = 'lan-paste-device-name';
 
 function generateId(): string {
-  return crypto.randomUUID().slice(0, 12);
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  const arr = crypto.getRandomValues(new Uint8Array(12));
+  return Array.from(arr, (b) => chars[b % chars.length]).join('');
 }
 
 function guessDeviceName(): string {
