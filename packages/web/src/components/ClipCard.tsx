@@ -31,26 +31,44 @@ export function ClipCard({
   const [copied, setCopied] = useState(false);
   const [confirming, setConfirming] = useState(false);
 
-  const handleCopy = async () => {
+  const showCopied = () => {
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  const handleCopyText = async (e: React.MouseEvent) => {
+    e.stopPropagation();
     if (clip.type === 'text' && clip.content) {
       await navigator.clipboard.writeText(clip.content);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      showCopied();
     }
+  };
+
+  const handleCopyImage = async (e: React.MouseEvent) => {
+    e.stopPropagation();
     if (clip.type === 'image' && clip.image_url) {
-      // Try to copy image to clipboard
       try {
         const res = await fetch(clip.image_url);
         const blob = await res.blob();
         await navigator.clipboard.write([
           new ClipboardItem({ [blob.type]: blob }),
         ]);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
+        showCopied();
       } catch {
-        // Fallback: open in new tab
+        // Clipboard API may not support images in non-secure context
+        // Fall back to opening in lightbox
         if (onImageClick && clip.image_url) onImageClick(clip.image_url);
       }
+    }
+  };
+
+  const handleDownload = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (clip.image_url) {
+      const a = document.createElement('a');
+      a.href = clip.image_url;
+      a.download = clip.filename || `clip-${clip.id}.png`;
+      a.click();
     }
   };
 
@@ -66,10 +84,7 @@ export function ClipCard({
   };
 
   return (
-    <div
-      onClick={handleCopy}
-      className="group cursor-pointer rounded-lg border border-zinc-800 bg-zinc-900 p-4 hover:border-zinc-700 transition-colors"
-    >
+    <div className="group rounded-lg border border-zinc-800 bg-zinc-900 p-4 hover:border-zinc-700 transition-colors">
       {clip.type === 'text' && clip.content && (
         <pre className="whitespace-pre-wrap break-words text-sm text-zinc-200 mb-3 max-h-40 overflow-hidden font-mono leading-relaxed">
           {clip.content.length > 500 ? clip.content.slice(0, 500) + '...' : clip.content}
@@ -98,11 +113,38 @@ export function ClipCard({
           <span>{formatSize(clip.size_bytes)}</span>
           <span>{timeAgo(clip.created_at)}</span>
         </div>
-        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-          {copied && <span className="text-emerald-400">Copied!</span>}
+        <div className="flex items-center gap-1.5">
+          {copied && <span className="text-emerald-400 mr-1">Copied!</span>}
+
+          {clip.type === 'text' && (
+            <button
+              onClick={handleCopyText}
+              className="rounded px-2 py-0.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 transition-colors"
+            >
+              Copy
+            </button>
+          )}
+
+          {clip.type === 'image' && (
+            <>
+              <button
+                onClick={handleCopyImage}
+                className="rounded px-2 py-0.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 transition-colors"
+              >
+                Copy
+              </button>
+              <button
+                onClick={handleDownload}
+                className="rounded px-2 py-0.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 transition-colors"
+              >
+                Download
+              </button>
+            </>
+          )}
+
           <button
             onClick={handleDelete}
-            className={`px-1.5 py-0.5 rounded hover:bg-zinc-800 ${confirming ? 'text-red-400' : 'text-zinc-500'}`}
+            className={`rounded px-2 py-0.5 hover:bg-zinc-800 transition-colors ${confirming ? 'text-red-400' : 'text-zinc-500 hover:text-zinc-200'}`}
           >
             {confirming ? 'Confirm?' : 'Delete'}
           </button>
