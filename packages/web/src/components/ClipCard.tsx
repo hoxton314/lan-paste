@@ -39,7 +39,20 @@ export function ClipCard({
   const handleCopyText = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (clip.type === 'text' && clip.content) {
-      await navigator.clipboard.writeText(clip.content);
+      try {
+        await navigator.clipboard.writeText(clip.content);
+      } catch {
+        // Clipboard API unavailable in non-secure context (HTTP over LAN)
+        // Fall back to execCommand
+        const ta = document.createElement('textarea');
+        ta.value = clip.content;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
       showCopied();
     }
   };
