@@ -5,7 +5,7 @@
 
 [Unit]
 Description=LAN Paste Clipboard Watcher
-After=graphical-session.target
+After=default.target
 
 [Service]
 Type=simple
@@ -18,4 +18,4 @@ Environment=WAYLAND_DISPLAY=wayland-1
 Environment=XDG_RUNTIME_DIR=/run/user/%U
 
 [Install]
-WantedBy=graphical-session.target
+WantedBy=default.target
