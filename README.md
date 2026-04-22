@@ -2,6 +2,8 @@
 
 Cross-platform clipboard sharing over Tailscale/LAN. Copy on any device, paste on any other — like Universal Clipboard, but for Linux, Windows, iOS, and anything with a browser.
 
+![LAN Paste web UI](docs/screenshot.png)
+
 ## How it works
 
 A central server on your homelab stores clips (text + images). Devices push and pull via REST API, with WebSocket for real-time sync.
