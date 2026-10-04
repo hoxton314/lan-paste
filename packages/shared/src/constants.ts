@@ -8,8 +8,13 @@ export const MAX_HISTORY_LIMIT = 200;
 export const DEDUP_WINDOW_MS = 5000;
 export const WS_PING_INTERVAL_MS = 30_000;
 export const WS_PONG_TIMEOUT_MS = 10_000;
-export const CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+// Frequent enough that short expiries (e.g. 5 min) are honoured promptly;
+// reads also filter expired clips, so this only reclaims space.
+export const CLEANUP_INTERVAL_MS = 60 * 1000;
+/** Upper bound for `expires_in` (30 days) */
+export const MAX_EXPIRES_IN_SECONDS = 30 * 24 * 60 * 60;
 
+/** Images that are stored as `type: 'image'` (viewable inline); everything else is `type: 'file'` */
 export const SUPPORTED_IMAGE_TYPES = [
   'image/png',
   'image/jpeg',

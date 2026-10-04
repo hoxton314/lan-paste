@@ -2,36 +2,40 @@ import { CLEANUP_INTERVAL_MS } from '@lan-paste/shared';
 import type { Clip } from '@lan-paste/shared';
 import { getDb } from './db.js';
 import { env } from './env.js';
-import { deleteImageFile } from './storage.js';
+import { log } from './logger.js';
+import { deleteBlobFile } from './storage.js';
+import { broadcastClipDeleted } from './ws.js';
 
-export function startCleanup(): void {
-  const run = () => {
-    const db = getDb();
-    const retention = `-${env.LAN_PASTE_RETENTION_DAYS} days`;
+/** Delete expired clips (explicit expires_at, or older than retention unless pinned). Returns count. */
+export function runCleanup(): number {
+  const db = getDb();
+  // RETENTION_DAYS <= 0 disables age-based expiry (explicit expires_at still applies)
+  const ageBased = env.LAN_PASTE_RETENTION_DAYS > 0;
+  const retention = `-${env.LAN_PASTE_RETENTION_DAYS} days`;
 
-    // First, find image clips that will be deleted so we can clean up files
-    const expiredImages = db.prepare(`
-      SELECT * FROM clips
-      WHERE type = 'image' AND filepath IS NOT NULL
-      AND (created_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?)
-        OR (expires_at IS NOT NULL AND expires_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now')))
-    `).all(retention) as Clip[];
+  const expired = db.prepare(`
+    SELECT * FROM clips
+    WHERE (? AND pinned = 0 AND created_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?))
+      OR (expires_at IS NOT NULL AND expires_at <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+  `).all(ageBased ? 1 : 0, retention) as Clip[];
 
-    for (const clip of expiredImages) {
-      if (clip.filepath) deleteImageFile(clip.filepath);
-    }
+  if (expired.length === 0) return 0;
 
-    const result = db.prepare(`
-      DELETE FROM clips
-      WHERE created_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?)
-      OR (expires_at IS NOT NULL AND expires_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-    `).run(retention);
+  const del = db.prepare('DELETE FROM clips WHERE id = ?');
+  db.transaction((clips: Clip[]) => {
+    for (const clip of clips) del.run(clip.id);
+  })(expired);
 
-    if (result.changes > 0) {
-      console.log(`[cleanup] Deleted ${result.changes} expired clip(s)`);
-    }
-  };
+  for (const clip of expired) {
+    if (clip.filepath) deleteBlobFile(clip.filepath);
+    broadcastClipDeleted(clip.id);
+  }
 
-  run();
-  setInterval(run, CLEANUP_INTERVAL_MS);
+  log.info(`[cleanup] Deleted ${expired.length} expired clip(s)`);
+  return expired.length;
+}
+
+export function startCleanup(): NodeJS.Timeout {
+  runCleanup();
+  return setInterval(runCleanup, CLEANUP_INTERVAL_MS);
 }

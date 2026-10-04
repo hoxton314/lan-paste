@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { HealthResponse } from '@lan-paste/shared';
-import { getDb } from '../db.js';
+import { getDb, getSchemaVersion } from '../db.js';
+import { VERSION } from '../version.js';
 
 export const healthRouter = Router();
 
@@ -12,9 +13,10 @@ healthRouter.get('/', (_req, res) => {
 
   const response: HealthResponse = {
     status: 'ok',
-    version: '0.1.0',
+    version: VERSION,
     uptime_seconds: Math.floor((Date.now() - startTime) / 1000),
     clips_count: count,
+    schema_version: getSchemaVersion(),
   };
 
   res.json(response);
