@@ -1,1 +1,7 @@
 @import "tailwindcss";
+
+/* Collapsed long text: fade the last lines out */
+.fade-bottom {
+  mask-image: linear-gradient(to bottom, black 70%, transparent);
+  -webkit-mask-image: linear-gradient(to bottom, black 70%, transparent);
+}
