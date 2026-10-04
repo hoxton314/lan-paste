@@ -2,9 +2,8 @@ import { createInterface } from 'node:readline/promises';
 import { Command } from 'commander';
 import chalk from 'chalk';
 import { hostname } from 'node:os';
-import { nanoid } from 'nanoid';
 import { DEFAULT_PORT } from '@lan-paste/shared';
-import { loadConfig, saveConfig, getConfigPath } from '../config.js';
+import { loadConfig, loadFileConfig, saveConfig, getConfigPath } from '../config.js';
 import type { LanPasteConfig } from '@lan-paste/shared';
 
 async function ask(rl: ReturnType<typeof createInterface>, prompt: string, defaultVal: string): Promise<string> {
@@ -22,14 +21,16 @@ configCommand
 
     console.log(chalk.bold('\nLAN Paste — Configuration\n'));
 
-    const serverUrl = await ask(rl, 'Server URL', `http://localhost:${DEFAULT_PORT}`);
-    const deviceName = await ask(rl, 'Device name', hostname());
-    const deviceId = nanoid();
+    // Keep the existing device ID so history/loop-prevention stay consistent
+    const existing = loadFileConfig();
+    const serverUrl = (await ask(rl, 'Server URL', existing.server.url || `http://localhost:${DEFAULT_PORT}`)).replace(/\/+$/, '');
+    const deviceName = await ask(rl, 'Device name', existing.device.name || hostname());
+    const deviceId = existing.device.id;
 
     const config: LanPasteConfig = {
-      server: { url: serverUrl },
+      ...existing,
+      server: { ...existing.server, url: serverUrl },
       device: { id: deviceId, name: deviceName },
-      sync: { auto: true, push: true, pull: true, images: true, max_size_mb: 10 },
     };
 
     saveConfig(config);
@@ -56,14 +57,17 @@ configCommand
     console.log(`  Push:        ${config.sync.push ? chalk.green('on') : chalk.red('off')}`);
     console.log(`  Pull:        ${config.sync.pull ? chalk.green('on') : chalk.red('off')}`);
     console.log(`  Images:      ${config.sync.images ? chalk.green('on') : chalk.red('off')}`);
-    console.log(`  Max size:    ${config.sync.max_size_mb}MB\n`);
+    console.log(`  Max size:    ${config.sync.max_size_mb}MB`);
+    console.log(`  Encryption:  ${config.encryption.enabled ? chalk.green('on') : chalk.red('off')}`);
+    console.log(`  Passphrase:  ${config.encryption.passphrase ? chalk.yellow('(set)') : chalk.dim('(none)')}\n`);
   });
 
 configCommand
   .command('set <key> <value>')
   .description('Set a config value (e.g. server.url http://100.64.0.1:3456)')
   .action((key: string, value: string) => {
-    const config = loadConfig();
+    // File config only — don't persist env-var overrides
+    const config = loadFileConfig();
 
     const parts = key.split('.');
     if (parts.length !== 2) {
@@ -78,7 +82,8 @@ configCommand
       process.exit(1);
     }
 
-    if (!(field in obj)) {
+    const optionalKeys = ['server.api_key'];
+    if (!(field in obj) && !optionalKeys.includes(key)) {
       console.error(chalk.red(`Unknown key: ${key}`));
       process.exit(1);
     }
@@ -86,15 +91,27 @@ configCommand
     // Type coerce booleans and numbers
     const current = (obj as Record<string, unknown>)[field];
     if (typeof current === 'boolean') {
-      (obj as Record<string, unknown>)[field] = value === 'true';
+      if (!['true', 'false', 'on', 'off', '1', '0'].includes(value)) {
+        console.error(chalk.red(`${key} expects true/false`));
+        process.exit(1);
+      }
+      (obj as Record<string, unknown>)[field] = ['true', 'on', '1'].includes(value);
     } else if (typeof current === 'number') {
+      if (!Number.isFinite(Number(value))) {
+        console.error(chalk.red(`${key} expects a number`));
+        process.exit(1);
+      }
       (obj as Record<string, unknown>)[field] = Number(value);
     } else {
       (obj as Record<string, unknown>)[field] = value;
     }
 
     saveConfig(config);
-    console.log(chalk.green(`Set ${key} = ${value}`));
+    const secret = key === 'server.api_key' || key === 'encryption.passphrase';
+    console.log(chalk.green(`Set ${key} = ${secret ? '(hidden)' : value}`));
+    if (key === 'encryption.enabled' && config.encryption.enabled && !config.encryption.passphrase) {
+      console.log(chalk.yellow('Note: set encryption.passphrase too (same passphrase on every device)'));
+    }
   });
 
 export { configCommand };

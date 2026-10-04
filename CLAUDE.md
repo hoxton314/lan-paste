@@ -18,7 +18,7 @@ Yarn workspaces monorepo with 4 packages:
 
 | Package | Path | Purpose |
 |---------|------|---------|
-| `@lan-paste/shared` | `packages/shared/` | Types, constants, hash utility |
+| `@lan-paste/shared` | `packages/shared/` | Types, constants, hash utility; `@lan-paste/shared/crypto` (E2E, browser-safe) |
 | `@lan-paste/server` | `packages/server/` | Express + SQLite + WebSocket server |
 | `@lan-paste/cli` | `packages/cli/` | CLI tool + clipboard daemon |
 | `@lan-paste/web` | `packages/web/` | React PWA (Vite + Tailwind v4) |
@@ -57,14 +57,16 @@ yarn workspace @lan-paste/cli dev watch --verbose
 yarn workspace @lan-paste/cli dev config show
 ```
 
-## Build
+## Build & Test
 
 ```bash
-yarn workspace @lan-paste/shared build   # Must build first
-yarn workspace @lan-paste/server build
-yarn workspace @lan-paste/web build      # Server serves this in production
-yarn workspace @lan-paste/cli build
+yarn build       # shared → web → server → cli (shared must build first)
+yarn typecheck
+yarn test        # vitest: shared (crypto), server (API/WS/migrations via supertest), cli
+docker compose up -d   # server in Docker, data in a volume
 ```
+
+CI: `.github/workflows/ci.yml` (typecheck, test, build, docker build).
 
 ## Environment
 
@@ -75,26 +77,35 @@ CLI configured via `~/.config/lan-paste/config.toml` or `LAN_PASTE_SERVER_URL` e
 
 ## Database
 
-SQLite (better-sqlite3, WAL mode). Two tables: `clips` and `devices`.
-Schema auto-created on first run. DB file at `LAN_PASTE_DB_PATH` (default: `./data/lan-paste.db`).
+SQLite (better-sqlite3, WAL mode). Tables: `clips`, `devices`, `clips_fts` (FTS5, keyed by clip id, kept in sync by triggers).
+Schema managed by ordered migrations in `packages/server/src/db.ts` (`PRAGMA user_version`); never edit a released migration, append a new one.
+DB file at `LAN_PASTE_DB_PATH` (default: `./data/lan-paste.db`).
 
 ## API
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/clips` | Push text (JSON) or image (multipart) |
-| GET | `/api/clips/latest` | Latest clip |
-| GET | `/api/clips` | History (paginated, filterable) |
-| GET | `/api/clips/:id/image` | Image binary |
-| DELETE | `/api/clips/:id` | Delete clip |
-| GET | `/api/health` | Health + stats |
-| WS | `/ws` | Real-time clip events |
+| POST | `/api/clips` | Push text (JSON) or image/file (multipart `file`); options `expires_in`, `burn_after_read`, `encrypted`, `target_device_id`, `platform` |
+| GET | `/api/clips/latest` | Latest clip (`?device_id=` = requester: excludes own/targeted-elsewhere/one-time) |
+| GET | `/api/clips` | History: `limit`, `offset`, `before`, `type`, `device_id`, `q` (FTS), `pinned` |
+| GET/PATCH/DELETE | `/api/clips/:id` | Get / `{pinned}` / delete |
+| POST | `/api/clips/:id/reveal` | Read + delete one-time text clip |
+| GET | `/api/clips/:id/image` | Inline image (not one-time/encrypted) |
+| GET | `/api/clips/:id/file` | Attachment download (one-time files deleted after) |
+| GET | `/api/devices` | Devices + online status |
+| GET | `/api/health` | Version, schema version, stats |
+| WS | `/ws` | `new_clip`, `clip_updated`, `clip_deleted`, `devices_changed` |
 
 ## Key Patterns
 
-- Text stored inline in SQLite, images as files on disk (`data/storage/images/YYYY/MM/`)
+- Text stored inline in SQLite, images/files on disk (`data/storage/{images,files}/YYYY/MM/`)
+- Every read filters expired clips (`NOT_EXPIRED` in db.ts); cleanup (every minute) only reclaims space
+- One-time clips: `content`/`image_url` withheld in responses; `/reveal` or `/file` consumes them
+- E2E: clients encrypt with `@lan-paste/shared/crypto` (pure-JS @noble, works over plain HTTP); server only sees `encrypted=1` + ciphertext
+- Uploaded blobs served with sandbox CSP + nosniff (SVG/HTML XSS)
 - WebSocket broadcasts `new_clip` to all connected clients except originator
 - 3-layer loop prevention in clipboard daemon: server device filtering, client cooldown, hash dedup
 - Server serves web UI build as static files in production
 - Optional API key auth (Tailscale is primary security boundary)
-- Hourly cleanup of expired clips (configurable retention days)
+- Retention cleanup skips pinned clips; `LAN_PASTE_RETENTION_DAYS=0` disables it
+- `createApp()` in `server/src/app.ts` is the testable app; `index.ts` only boots it

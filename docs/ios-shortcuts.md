@@ -36,7 +36,8 @@ If [Content] [is] [Image]:
         Request Body: Form
             device_id (Text): iphone-shortcut
             device_name (Text): iPhone
-            image (File): [Content]
+            platform (Text): ios
+            file (File): [Content]
 
 Otherwise:
     Get Contents of URL
@@ -49,7 +50,8 @@ Otherwise:
                 "type": "text",
                 "content": [Content],
                 "device_id": "iphone-shortcut",
-                "device_name": "iPhone"
+                "device_name": "iPhone",
+                "platform": "ios"
             }
 End If
 
@@ -76,7 +78,7 @@ Gets the latest clip from the server and copies it to your clipboard.
 
 ```
 Get Contents of URL
-    URL: SERVER_URL/api/clips/latest
+    URL: SERVER_URL/api/clips/latest?device_id=iphone-shortcut
     Method: GET
 
 Get Dictionary Value [type] from [Contents of URL]
@@ -88,7 +90,7 @@ If [ClipType] [is] [text]:
     Show Notification "Copied: [Dictionary Value]"
 
 Otherwise:
-    Get Dictionary Value [image_url] from [Contents of URL]
+    Get Dictionary Value [file_url] from [Contents of URL]
     Get Contents of URL
         URL: SERVER_URL[Dictionary Value]
         Method: GET
@@ -135,6 +137,10 @@ Show Notification "Copied!"
 
 ## Tips
 
+- **Files**: any file type works in Shortcut 1 (the `file` field); images still preview in the web UI.
+- **One-time / expiring clips**: add `"burn_after_read": true` or `"expires_in": 600` (seconds) to the JSON body (or as form fields).
+- **`/latest` with `device_id`** skips clips this shortcut pushed itself, one-time clips and clips sent to other devices.
+- **Encrypted clips** (E2E passphrase) can't be decrypted by Shortcuts — use the web UI for those.
 - **API Key**: If you've set `LAN_PASTE_API_KEY` on the server, add `?api_key=YOUR_KEY` to each URL, e.g. `SERVER_URL/api/clips?api_key=YOUR_KEY`
 - **Automation**: You can trigger shortcuts automatically — e.g. when connecting to your home WiFi
 - **Back Tap**: Assign a shortcut to iPhone Back Tap (Settings > Accessibility > Touch > Back Tap) for instant push/pull

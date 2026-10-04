@@ -1,4 +1,12 @@
+import { useEffect } from 'react';
+
 export function ImagePreview({ url, onClose }: { url: string; onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
@@ -9,8 +17,9 @@ export function ImagePreview({ url, onClose }: { url: string; onClose: () => voi
         <button
           onClick={onClose}
           className="absolute -top-3 -right-3 rounded-full bg-zinc-800 px-2.5 py-1 text-sm text-zinc-300 hover:bg-zinc-700"
+          aria-label="Close"
         >
-          x
+          ✕
         </button>
       </div>
     </div>

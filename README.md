@@ -6,12 +6,21 @@ Cross-platform clipboard sharing over Tailscale/LAN. Copy on any device, paste o
 
 ## How it works
 
-A central server on your homelab stores clips (text + images). Devices push and pull via REST API, with WebSocket for real-time sync.
+A central server on your homelab stores clips (text, images and files). Devices push and pull via REST API, with WebSocket for real-time sync.
 
-- **Linux desktop**: Background daemon auto-syncs clipboard bidirectionally
-- **iOS/iPad**: PWA web app + iOS Shortcuts for quick push/pull
-- **Windows**: Web UI + CLI
+- **Linux / macOS / Windows desktop**: Background daemon auto-syncs the clipboard (text + images) bidirectionally
+- **iOS/iPad/Android**: PWA web app (with Share Target) + iOS Shortcuts for quick push/pull
 - **Any device**: Open the web UI in a browser
+
+### Features
+
+- Real-time sync over WebSocket; the daemon catches up on clips missed while offline
+- Text, images and **any file type** (drag & drop, paste anywhere, share sheet)
+- **Full-text search** of history (diacritic-insensitive), infinite scroll
+- **Pin** clips to keep them forever; **expiring** and **one-time** (burn after read) clips
+- **Send to a specific device**, device list with online status
+- Optional **end-to-end encryption** with a shared passphrase — the server only stores ciphertext
+- Syntax highlighting and clickable links for text clips
 
 ## Quick Start
 
@@ -21,10 +30,13 @@ A central server on your homelab stores clips (text + images). Devices push and 
 git clone https://github.com/your-user/lan-paste.git
 cd lan-paste
 yarn
-yarn workspace @lan-paste/shared build
-yarn workspace @lan-paste/web build
-yarn workspace @lan-paste/server build
-yarn workspace @lan-paste/cli build
+yarn build      # shared → web → server → cli
+```
+
+Or run the server with Docker:
+
+```bash
+docker compose up -d        # data persisted in the lan-paste-data volume
 ```
 
 ### 2. Configure
@@ -54,18 +66,31 @@ echo "hello" | lan-paste push
 lan-paste push "some text"
 lan-paste push -c              # from clipboard
 
-# Push images
+# Push images & files
 lan-paste push -f screenshot.png
+lan-paste push -f report.pdf   # any file type
 lan-paste push -ci             # clipboard image
+
+# Push options
+lan-paste push --expire 10m "temporary"      # 30s, 10m, 2h, 1d
+lan-paste push --once "s3cr3t-password"      # one-time: deleted after first read
+lan-paste push --to laptop "just for you"    # target a device (name or id)
+lan-paste push --encrypt "e2e encrypted"     # or set encryption.enabled
 
 # Pull
 lan-paste pull                 # to stdout
 lan-paste pull -c              # to clipboard
-lan-paste pull -o image.png    # save image
+lan-paste pull -o image.png    # save image/file
+lan-paste get <id>             # a specific clip (reveals one-time clips)
 
-# History
+# History & management
 lan-paste history
 lan-paste history -n 10 --type text
+lan-paste history --search "docker compose"
+lan-paste history --pinned
+lan-paste pin <id>  /  lan-paste unpin <id>
+lan-paste delete <id> [<id>...]
+lan-paste devices              # known devices + online status
 
 # Auto-sync daemon
 lan-paste watch                # bidirectional clipboard sync
@@ -102,6 +127,10 @@ yarn dev:web
 
 # CLI during dev
 yarn workspace @lan-paste/cli dev push "test"
+
+# Typecheck & tests (vitest; also run in CI)
+yarn typecheck
+yarn test
 ```
 
 ## Configuration
@@ -112,10 +141,13 @@ yarn workspace @lan-paste/cli dev push "test"
 |----------|---------|-------------|
 | `LAN_PASTE_PORT` | `3456` | Server port |
 | `LAN_PASTE_HOST` | `0.0.0.0` | Bind address |
-| `LAN_PASTE_DB_PATH` | `./data/lan-paste.db` | SQLite database |
-| `LAN_PASTE_STORAGE_DIR` | `./data/storage` | Image storage |
-| `LAN_PASTE_RETENTION_DAYS` | `7` | Auto-delete clips after N days |
-| `LAN_PASTE_API_KEY` | _(empty)_ | Optional auth token |
+| `LAN_PASTE_DB_PATH` | `./data/lan-paste.db` | SQLite database (schema migrated automatically) |
+| `LAN_PASTE_STORAGE_DIR` | `./data/storage` | Image/file storage |
+| `LAN_PASTE_RETENTION_DAYS` | `7` | Auto-delete unpinned clips after N days (`0` = keep forever) |
+| `LAN_PASTE_MAX_CLIP_SIZE_MB` | `10` | Max image/file upload size |
+| `LAN_PASTE_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
+| `LAN_PASTE_API_KEY` | _(empty)_ | Optional auth token (REST: `Authorization: Bearer`, WS/img: `?api_key=`) |
+| `LAN_PASTE_WEB_DIR` | _(auto)_ | Path to the built web UI |
 
 ### CLI (~/.config/lan-paste/config.toml)
 
@@ -130,14 +162,49 @@ name = "my-laptop"
 [sync]
 auto = true
 images = true
+
+[encryption]
+enabled = false
+passphrase = ""   # same passphrase on every device
 ```
+
+Env overrides: `LAN_PASTE_SERVER_URL`, `LAN_PASTE_DEVICE_NAME`, `LAN_PASTE_API_KEY`, `LAN_PASTE_PASSPHRASE`, `LAN_PASTE_CONFIG` (config file path).
+
+### Clipboard support (daemon)
+
+| Platform | Text | Images | Tool |
+|----------|------|--------|------|
+| Linux (Wayland) | ✓ | ✓ | `wl-clipboard` |
+| Linux (X11) | ✓ | ✓ | `xclip` (`xsel` text only) |
+| macOS | ✓ | ✓ (PNG) | `pbcopy`/`pbpaste`, `osascript` |
+| Windows | ✓ | ✓ (PNG) | PowerShell |
+
+## API
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/clips` | Push text (JSON) or image/file (multipart field `file`). Options: `expires_in`, `burn_after_read`, `encrypted`, `target_device_id`, `platform` |
+| GET | `/api/clips` | History: `limit`, `offset`, `before` (cursor), `type`, `device_id`, `q` (search), `pinned` |
+| GET | `/api/clips/latest` | Latest clip; `?device_id=` excludes own clips and clips targeted elsewhere |
+| GET | `/api/clips/:id` | Single clip |
+| PATCH | `/api/clips/:id` | `{ "pinned": true }` |
+| POST | `/api/clips/:id/reveal` | Read (and delete) a one-time text clip |
+| GET | `/api/clips/:id/image` | Image, inline |
+| GET | `/api/clips/:id/file` | Image/file download (one-time files are deleted after download) |
+| DELETE | `/api/clips/:id` | Delete clip |
+| GET | `/api/devices` | Devices with online status |
+| GET | `/api/health` | Version, schema version, stats |
+| WS | `/ws` | Events: `new_clip`, `clip_updated`, `clip_deleted`, `devices_changed` |
 
 ## Security
 
 - Tailscale provides WireGuard encryption + device authentication
-- No HTTPS needed (Tailscale handles it)
-- Optional API key for defense-in-depth
-- Content size limits and MIME type validation
+- Optional API key for defense-in-depth (REST + WebSocket)
+- Optional end-to-end encryption (AES-256-GCM, key derived from a shared passphrase with PBKDF2-SHA256): the server never sees plaintext. Search does not cover encrypted clips.
+- Uploaded files/images are served with a sandboxing CSP and `nosniff`, so e.g. SVG/HTML uploads can't run scripts
+- Content size limits
+
+**HTTPS note:** the PWA's offline mode, Share Target and the browser clipboard API need a secure context. Over plain `http://<tailscale-ip>` the web UI works, but those features are unavailable — use [`tailscale serve`](https://tailscale.com/kb/1312/serve) to get HTTPS on your tailnet.
 
 ## License
 

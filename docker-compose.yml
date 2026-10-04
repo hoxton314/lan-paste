@@ -1,0 +1,18 @@
+services:
+  lan-paste:
+    build: .
+    image: lan-paste:latest
+    container_name: lan-paste
+    restart: unless-stopped
+    ports:
+      - "3456:3456"
+    environment:
+      LAN_PASTE_RETENTION_DAYS: "7"
+      LAN_PASTE_MAX_CLIP_SIZE_MB: "10"
+      LAN_PASTE_LOG_LEVEL: info
+      # LAN_PASTE_API_KEY: change-me
+    volumes:
+      - lan-paste-data:/data
+
+volumes:
+  lan-paste-data:

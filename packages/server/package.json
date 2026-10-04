@@ -6,7 +6,8 @@
     "build": "tsup src/index.ts --format esm --target node22",
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@lan-paste/shared": "0.1.0",
@@ -25,8 +26,11 @@
     "@types/express": "^5",
     "@types/express-ws": "^3.0.6",
     "@types/multer": "^1",
+    "@types/supertest": "^7.2.1",
+    "supertest": "^7.3.1",
     "tsup": "^8",
     "tsx": "^4",
-    "typescript": "^5.7"
+    "typescript": "^5.7",
+    "vitest": "^5.0.3"
   }
 }

@@ -1,5 +1,10 @@
+import type { DevicePlatform } from '@lan-paste/shared';
+import { storageGet, storageSet } from './storage.js';
+
 const DEVICE_ID_KEY = 'lan-paste-device-id';
 const DEVICE_NAME_KEY = 'lan-paste-device-name';
+
+let memoryId: string | null = null;
 
 function generateId(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -7,9 +12,15 @@ function generateId(): string {
   return Array.from(arr, (b) => chars[b % chars.length]).join('');
 }
 
+function isIos(): boolean {
+  const ua = navigator.userAgent;
+  // iPadOS reports itself as "Macintosh" — detect via touch support
+  return /iPad|iPhone|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+}
+
 function guessDeviceName(): string {
   const ua = navigator.userAgent;
-  if (/iPad/.test(ua)) return 'iPad';
+  if (/iPad/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) return 'iPad';
   if (/iPhone/.test(ua)) return 'iPhone';
   if (/Android/.test(ua)) return 'Android';
   if (/Windows/.test(ua)) return 'Windows';
@@ -18,24 +29,31 @@ function guessDeviceName(): string {
   return 'Web';
 }
 
+export function getPlatform(): DevicePlatform {
+  if (isIos()) return 'ios';
+  if (/Android/.test(navigator.userAgent)) return 'android';
+  return 'web';
+}
+
 export function getDeviceId(): string {
-  let id = localStorage.getItem(DEVICE_ID_KEY);
+  let id = storageGet(DEVICE_ID_KEY) ?? memoryId;
   if (!id) {
     id = generateId();
-    localStorage.setItem(DEVICE_ID_KEY, id);
+    memoryId = id;
+    storageSet(DEVICE_ID_KEY, id);
   }
   return id;
 }
 
 export function getDeviceName(): string {
-  let name = localStorage.getItem(DEVICE_NAME_KEY);
+  let name = storageGet(DEVICE_NAME_KEY);
   if (!name) {
     name = guessDeviceName();
-    localStorage.setItem(DEVICE_NAME_KEY, name);
+    storageSet(DEVICE_NAME_KEY, name);
   }
   return name;
 }
 
 export function setDeviceName(name: string): void {
-  localStorage.setItem(DEVICE_NAME_KEY, name);
+  storageSet(DEVICE_NAME_KEY, name.trim() || guessDeviceName());
 }
