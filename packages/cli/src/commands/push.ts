@@ -1,55 +1,93 @@
+import { readFileSync } from 'node:fs';
+import { basename } from 'node:path';
 import { Command } from 'commander';
 import ora from 'ora';
 import chalk from 'chalk';
-import { loadConfig } from '../config.js';
-import { ApiClient } from '../client.js';
+import type { ClipResponse, PushOptions } from '@lan-paste/shared';
+import { resolveDevice } from '../client.js';
 import { readClipboardText, readClipboardImage, clipboardHasImage } from '../clipboard/index.js';
+import { getContext } from '../lib/context.js';
+import { encryptClipBytes, encryptClipText, requireKey } from '../lib/e2e.js';
+import { errMsg, extFromMime, formatSize, mimeFromFilename, parseDuration } from '../lib/util.js';
+
+interface PushCliOptions {
+  clipboard?: boolean;
+  image?: boolean;
+  file?: string;
+  server?: string;
+  device?: string;
+  expire?: string;
+  once?: boolean;
+  to?: string;
+  encrypt?: boolean;
+}
 
 export const pushCommand = new Command('push')
-  .description('Push text or image to LAN Paste')
+  .description('Push text, an image or any file to LAN Paste')
   .argument('[text]', 'Text to push (omit to read from stdin or clipboard)')
   .option('-c, --clipboard', 'Read from system clipboard')
   .option('-i, --image', 'Read image from clipboard (combine with -c)')
-  .option('-f, --file <path>', 'Push an image file')
+  .option('-f, --file <path>', 'Push a file (images are shown inline, anything else as a download)')
+  .option('--expire <duration>', 'Delete after a duration, e.g. 30s, 10m, 2h, 1d')
+  .option('--once', 'One-time clip: deleted after it is read once')
+  .option('--to <device>', 'Send to one device (name or id); other devices will not auto-apply it')
+  .option('--encrypt', 'End-to-end encrypt (default: config encryption.enabled)')
+  .option('--no-encrypt', 'Do not encrypt, even if encryption.enabled is set')
   .option('-s, --server <url>', 'Server URL override')
   .option('-d, --device <name>', 'Device name override')
-  .action(async (text: string | undefined, opts: {
-    clipboard?: boolean; image?: boolean; file?: string;
-    server?: string; device?: string;
-  }) => {
-    const config = loadConfig();
-    const serverUrl = opts.server || config.server.url;
-    const deviceName = opts.device || config.device.name;
-    const client = new ApiClient(serverUrl, config.server.api_key);
-
+  .action(async (text: string | undefined, opts: PushCliOptions) => {
+    const { config, client, who } = getContext(opts);
     const spinner = ora('Pushing...').start();
 
     try {
-      // Image file
+      const pushOpts: PushOptions = {};
+      if (opts.expire) pushOpts.expires_in = parseDuration(opts.expire);
+      if (opts.once) pushOpts.burn_after_read = true;
+      if (opts.to) {
+        const target = resolveDevice(await client.devices(), opts.to);
+        pushOpts.target_device_id = target.id;
+      }
+
+      // --encrypt / --no-encrypt override the config default
+      const encrypt = opts.encrypt ?? config.encryption.enabled;
+      if (encrypt) {
+        spinner.text = 'Deriving encryption key...';
+        pushOpts.encrypted = true;
+      }
+      const key = encrypt ? requireKey(config) : null;
+      spinner.text = 'Pushing...';
+
+      const pushBinary = (data: Buffer, filename: string, mime: string): Promise<ClipResponse> =>
+        client.pushFile(key ? encryptClipBytes(data, key) : data, filename, mime, who, pushOpts);
+
+      const suffix = (clip: ClipResponse) => {
+        const flags = [
+          clip.encrypted && '🔒 encrypted',
+          clip.burn_after_read && '🔥 one-time',
+          clip.expires_at && `expires ${new Date(clip.expires_at).toLocaleString()}`,
+          opts.to && `→ ${opts.to}`,
+        ].filter(Boolean);
+        return flags.length ? chalk.dim(` [${flags.join(', ')}]`) : '';
+      };
+
+      // File (any type)
       if (opts.file) {
-        const clip = await client.pushImageFile(opts.file, config.device.id, deviceName);
-        spinner.succeed(`Pushed image ${chalk.cyan(clip.id)} (${clip.filename}, ${clip.size_bytes}B)`);
+        const data = readFileSync(opts.file);
+        const name = basename(opts.file);
+        const clip = await pushBinary(data, name, mimeFromFilename(name));
+        spinner.succeed(`Pushed ${clip.type} ${chalk.cyan(clip.id)} (${name}, ${formatSize(data.length)})${suffix(clip)}`);
         return;
       }
 
-      // Clipboard image
-      if (opts.clipboard && opts.image) {
-        const { data, mimeType } = readClipboardImage();
-        const ext = mimeType.split('/')[1] || 'png';
-        const clip = await client.pushImage(data, `clipboard.${ext}`, mimeType, config.device.id, deviceName);
-        spinner.succeed(`Pushed clipboard image ${chalk.cyan(clip.id)} (${clip.size_bytes}B)`);
-        return;
-      }
-
-      // Auto-detect: if --clipboard and clipboard has image (no explicit text), push image
-      if (opts.clipboard && !text && clipboardHasImage()) {
+      // Clipboard image: explicit (-c -i) or auto-detected (-c with an image on the clipboard)
+      if (opts.clipboard && !text && (opts.image || clipboardHasImage())) {
         try {
           const { data, mimeType } = readClipboardImage();
-          const ext = mimeType.split('/')[1] || 'png';
-          const clip = await client.pushImage(data, `clipboard.${ext}`, mimeType, config.device.id, deviceName);
-          spinner.succeed(`Pushed clipboard image ${chalk.cyan(clip.id)} (${clip.size_bytes}B)`);
+          const clip = await pushBinary(data, `clipboard.${extFromMime(mimeType)}`, mimeType);
+          spinner.succeed(`Pushed clipboard image ${chalk.cyan(clip.id)} (${formatSize(data.length)})${suffix(clip)}`);
           return;
-        } catch {
+        } catch (err) {
+          if (opts.image) throw err;
           // Fall through to text
         }
       }
@@ -77,10 +115,10 @@ export const pushCommand = new Command('push')
         process.exit(1);
       }
 
-      const clip = await client.pushText(content, config.device.id, deviceName);
-      spinner.succeed(`Pushed ${chalk.cyan(clip.id)} (${clip.size_bytes}B)`);
+      const clip = await client.pushText(key ? encryptClipText(content, key) : content, who, pushOpts);
+      spinner.succeed(`Pushed ${chalk.cyan(clip.id)} (${formatSize(Buffer.byteLength(content))})${suffix(clip)}`);
     } catch (err) {
-      spinner.fail(`Push failed: ${err instanceof Error ? err.message : err}`);
+      spinner.fail(`Push failed: ${errMsg(err)}`);
       process.exit(1);
     }
   });

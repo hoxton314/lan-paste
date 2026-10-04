@@ -8,7 +8,8 @@
   "scripts": {
     "build": "tsup src/index.ts --format esm --target node22",
     "dev": "tsx src/index.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@lan-paste/shared": "0.1.0",
@@ -21,6 +22,7 @@
   "devDependencies": {
     "tsup": "^8",
     "tsx": "^4",
-    "typescript": "^5.7"
+    "typescript": "^5.7",
+    "vitest": "^5.0.3"
   }
 }
