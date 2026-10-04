@@ -1,13 +1,15 @@
 #!/bin/bash
 set -e
 
-cd /opt/lan-paste
+SERVICE="${LAN_PASTE_SERVICE:-lan-paste-server}"
+
+cd "${LAN_PASTE_DIR:-/opt/lan-paste}"
 
 echo "Pulling latest..."
 git pull
 
 echo "Installing dependencies..."
-yarn install
+yarn install --frozen-lockfile
 
 echo "Building..."
 yarn workspace @lan-paste/shared build
@@ -15,7 +17,7 @@ yarn workspace @lan-paste/web build
 yarn workspace @lan-paste/server build
 
 echo "Restarting service..."
-systemctl restart lan-paste
+systemctl restart "$SERVICE"
 
 echo "Done. Status:"
-systemctl status lan-paste --no-pager | head -10
+systemctl status "$SERVICE" --no-pager | head -10
